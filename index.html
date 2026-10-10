@@ -1,0 +1,45 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Planter Setup Helper (demo)</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:820px;margin:0 auto;padding:12px;background:#f4f6f3;color:#1d2a1d}
+h1{font-size:1.3em;margin:.3em 0}.disc{background:#fff4d6;border:1px solid #e0c060;padding:8px;border-radius:6px;font-size:.85em}
+#log{background:#fff;border:1px solid #ccd;border-radius:8px;min-height:300px;padding:10px;margin:10px 0;overflow:auto}
+.u{margin:8px 0;text-align:right}.u span{background:#2f6b2f;color:#fff;padding:6px 10px;border-radius:12px;display:inline-block}
+.b{margin:8px 0}.b .card{background:#eef3ee;padding:8px 10px;border-radius:10px}.src{font-size:.8em;color:#456}.src a{color:#245}
+.warn{color:#9a5b00;font-weight:600}.alt{font-size:.82em;color:#555;margin-top:4px}.alt a{cursor:pointer;color:#2f6b2f;text-decoration:underline}
+form{display:flex;gap:6px}input{flex:1;padding:10px;font-size:1em}button{padding:10px 16px;background:#2f6b2f;color:#fff;border:0;border-radius:6px}
+.chips button{background:#dfe8df;color:#1d2a1d;margin:2px;padding:5px 8px;font-size:.8em}
+</style></head><body>
+<h1>🌽 Planter Setup Helper - 20|20 / vSet / vDrive / DeltaForce <small>(demo)</small></h1>
+<div class="disc"><b>Independent demo - not affiliated with or endorsed by Precision Planting LLC.</b> Answers come only from cited public Precision Planting guides (© Precision Planting) and may not match your software version. Not a substitute for your dealer or the official manuals. For anything safety-critical, hydraulic, warranty or not covered here, call your dealer - NZ: PSS Ag, 07 245 0325.</div>
+<div id="log"></div>
+<form id="f"><input id="q" placeholder="e.g. What vacuum for maize with SpeedTube?" autocomplete="off"><button>Ask</button></form>
+<div class="chips" id="chips"></div>
+<script src="retriever.js"></script>
+<script>
+let KB, search;
+const log = document.getElementById('log'), esc = s => s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+function add(cls, html){const d=document.createElement('div');d.className=cls;d.innerHTML=html;log.appendChild(d);log.scrollTop=1e9}
+function cite(x){return x.src.map(k=>`<a href="${KB.sources[k].url}" target="_blank" rel="noopener">${esc(KB.sources[k].title)}</a>`).join(' · ')}
+function show(x){return `<div class="card"><b>${esc(x.q)}</b><br>${esc(x.a)}${x.uncertain?'<br><span class="warn">⚠ Uncertain / partly sourced - confirm with your dealer.</span>':''}<div class="src">Source: ${cite(x)}</div></div>`}
+async function ask(q){
+  add('u',`<span>${esc(q)}</span>`);
+  const r = PPRetriever.answer(KB, search, q);
+  let html;
+  if (r.confident) {
+    let llm = null;
+    try { const resp = await fetch('api/llm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q,ctx:[r.top.x,...r.alts.map(a=>a.x)]})}); if(resp.ok) llm=(await resp.json()).text; } catch(e){}
+    html = (llm?`<div class="card">${esc(llm)}</div>`:'') + show(r.top.x);
+  } else {
+    html = `<div class="card">I can't answer that confidently from the documented guides, so I won't guess. Please contact your dealer (NZ: PSS Ag, 07 245 0325, sales@pssagnz.com) or check the official docs at docs.precisionplanting.com.</div>`;
+  }
+  const alts = (r.confident ? r.alts : [r.top, ...r.alts]).filter(Boolean);
+  if (alts.length) html += `<div class="alt">Related: ${alts.map(a=>`<a data-id="${a.x.id}">${esc(a.x.q)}</a>`).join(' | ')}</div>`;
+  add('b', html);
+}
+log.addEventListener('click', e => { const id=e.target.dataset&&e.target.dataset.id; if(id){const x=KB.qa.find(z=>z.id==id); add('b',show(x));} });
+document.getElementById('f').onsubmit = e => { e.preventDefault(); const q=document.getElementById('q'); if(q.value.trim()) ask(q.value.trim()); q.value=''; };
+fetch('kb.json').then(r=>r.json()).then(kb=>{ KB=kb; search=PPRetriever.build(kb);
+  add('b',`<div class="card">Kia ora - ask me about 20|20 setup, vSet/vDrive, SpeedTube, DeltaForce/AirForce, SmartFirmer, CleanSweep, FurrowJet, prescriptions, data and updates. ${kb.qa.length} documented answers, each with its source.</div>`);
+  ['vacuum for maize with SpeedTube','DeltaForce starting target','vSet Select stops seeding late','what does SRI mean','upload to Panorama'].forEach(t=>{const b=document.createElement('button');b.textContent=t;b.onclick=()=>ask(t);document.getElementById('chips').appendChild(b)}); });
+</script></body></html>
