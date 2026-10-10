@@ -44,6 +44,8 @@ main{flex:1;overflow-y:auto;padding:18px 14px 8px;scroll-behavior:smooth}
 .row{display:flex;gap:9px;margin:10px 0;animation:rise .28s ease both}
 .row.user{justify-content:flex-end}
 .avatar{width:30px;height:30px;flex:none;border-radius:50%;background:var(--green-800);display:grid;place-items:center;margin-top:2px}
+.bot .bubble.md{white-space:normal}.md p{margin:0 0 8px}.md p:last-of-type{margin-bottom:0}.md ul,.md ol{margin:4px 0 8px;padding-left:22px}.md li{margin:2px 0}.md code{background:var(--green-50);padding:1px 4px;border-radius:4px;font-size:.88em}
+.tbl{overflow-x:auto;margin:6px 0 10px}.md table{border-collapse:collapse;font-size:.86rem;min-width:100%}.md th,.md td{border:1px solid var(--line);padding:5px 8px;text-align:left;vertical-align:top}.md th{background:var(--green-50);color:var(--green-800)}
 .bubble{max-width:min(82%,620px);padding:11px 14px;border-radius:var(--radius);font-size:.95rem;white-space:pre-wrap;word-wrap:break-word}
 .user .bubble{background:var(--green-700);color:#fff;border-bottom-right-radius:6px}
 .bot .bubble{background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow);border-bottom-left-radius:6px}
@@ -115,12 +117,39 @@ const dealerCard = () => `<div class="dealer"><span aria-hidden="true">📞</spa
 function cites(c) { if (!c || !c.length) return ""; return `<div class="cites">` + c.map(x => {
   const s = x.sources && x.sources[0]; const warn = x.uncertain ? ` <span class="badge-warn" title="Uncertain or partly sourced - confirm with your dealer">⚠ Uncertain</span>` : "";
   return `<a class="cite" href="${s ? esc(s.url) : "#"}" target="_blank" rel="noopener" title="${esc(x.q)} - ${s ? esc(s.title) : ""}">📄 <span>#${x.id} ${esc(x.q)}</span></a>${warn}`; }).join("") + `</div>`; }
+// Minimal safe markdown: everything is HTML-escaped FIRST, then only our own tags are added.
+function inline(t) {
+  return t.replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>").replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,;:!?]|$)/g, "$1<i>$2</i>")
+    .replace(/`([^`\n]+)`/g, "<code>$1</code>")
+    .replace(/https?:\/\/[^\s<)"]+/g, u => `<a href="${u}" target="_blank" rel="noopener nofollow">${u.replace(/^https?:\/\/(www\.)?/, "").slice(0, 60)}</a>`);
+}
+function md(src) {
+  const lines = esc(src).split("\n"), out = []; let i = 0;
+  const cells = l => l.trim().replace(/^\||\|$/g, "").split("|").map(c => inline(c.trim()));
+  while (i < lines.length) {
+    const l = lines[i];
+    if (/^\s*\|.*\|\s*$/.test(l) && i + 1 < lines.length && /^\s*\|?\s*:?-{2,}/.test(lines[i + 1])) {      // table
+      const head = cells(l); i += 2; const rows = [];
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) rows.push(cells(lines[i++]));
+      out.push(`<div class="tbl"><table><thead><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`); continue; }
+    if (/^\s*([-*•])\s+/.test(l)) { const it = []; while (i < lines.length && /^\s*([-*•])\s+/.test(lines[i])) it.push(inline(lines[i++].replace(/^\s*[-*•]\s+/, "")));
+      out.push(`<ul>${it.map(x => `<li>${x}</li>`).join("")}</ul>`); continue; }
+    if (/^\s*\d+[.)]\s+/.test(l)) { const it = []; while (i < lines.length && (/^\s*\d+[.)]\s+/.test(lines[i]) || (/^\s{2,}\S/.test(lines[i]) && it.length))) {
+        if (/^\s*\d+[.)]\s+/.test(lines[i])) it.push(inline(lines[i].replace(/^\s*\d+[.)]\s+/, ""))); else it[it.length - 1] += "<br>" + inline(lines[i].trim()); i++; }
+      out.push(`<ol>${it.map(x => `<li>${x}</li>`).join("")}</ol>`); continue; }
+    if (/^\s*#{1,4}\s+/.test(l)) { out.push(`<p><b>${inline(l.replace(/^\s*#+\s+/, ""))}</b></p>`); i++; continue; }
+    if (!l.trim()) { i++; continue; }
+    const para = []; while (i < lines.length && lines[i].trim() && !/^\s*([-*•]|\d+[.)]|#{1,4})\s+|^\s*\|/.test(lines[i])) para.push(inline(lines[i++].trim()));
+    if (para.length) out.push(`<p>${para.join("<br>")}</p>`); else out.push(`<p>${inline(lines[i++])}</p>`);
+  }
+  return out.join("");
+}
 function botMsg(d) {
   const needsDealer = /dealer|PSS Ag/i.test(d.reply) || (d.citations || []).some(c => c.uncertain);
-  const txt = esc(d.reply.replace(/\*\*/g, "")).replace(/^\((AI|Web)[^)]*\)\n?/, m => `<span class="note">${m.replace(/[()\n]/g, "")}</span>`)
-    .replace(/^From the web, not the official guides:\n?/, `<span class="note">🌐 From the web, not the official guides</span>`)
-    .replace(/https?:\/\/[^\s<]+/g, u => `<a href="${u}" target="_blank" rel="noopener">${u.replace(/^https?:\/\/(www\.)?/, "").slice(0, 60)}</a>`);
-  row("bot", `<div class="bubble">${txt}${cites(d.citations)}${needsDealer ? dealerCard() : ""}</div>`);
+  let r = String(d.reply || ""), note = "";
+  r = r.replace(/^\(((?:AI|Web)[^)]*)\)\n?/, (m, x) => { note = `<span class="note">${esc(x)}</span>`; return ""; });
+  r = r.replace(/^From the web, not the official guides:\n?/, () => { note = `<span class="note">🌐 From the web, not the official guides</span>`; return ""; });
+  row("bot", `<div class="bubble md">${note}${md(r)}${cites(d.citations)}${needsDealer ? dealerCard() : ""}</div>`);
 }
 function offline(q) {
   const r = search(q, 1)[0];
