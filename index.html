@@ -117,7 +117,9 @@ function cites(c) { if (!c || !c.length) return ""; return `<div class="cites">`
   return `<a class="cite" href="${s ? esc(s.url) : "#"}" target="_blank" rel="noopener" title="${esc(x.q)} - ${s ? esc(s.title) : ""}">📄 <span>#${x.id} ${esc(x.q)}</span></a>${warn}`; }).join("") + `</div>`; }
 function botMsg(d) {
   const needsDealer = /dealer|PSS Ag/i.test(d.reply) || (d.citations || []).some(c => c.uncertain);
-  const txt = esc(d.reply).replace(/^\(AI offline[^)]*\)\n?/, m => `<span class="note">${m.replace(/[()\n]/g, "")}</span>`);
+  const txt = esc(d.reply.replace(/\*\*/g, "")).replace(/^\((AI|Web)[^)]*\)\n?/, m => `<span class="note">${m.replace(/[()\n]/g, "")}</span>`)
+    .replace(/^From the web, not the official guides:\n?/, `<span class="note">🌐 From the web, not the official guides</span>`)
+    .replace(/https?:\/\/[^\s<]+/g, u => `<a href="${u}" target="_blank" rel="noopener">${u.replace(/^https?:\/\/(www\.)?/, "").slice(0, 60)}</a>`);
   row("bot", `<div class="bubble">${txt}${cites(d.citations)}${needsDealer ? dealerCard() : ""}</div>`);
 }
 function offline(q) {

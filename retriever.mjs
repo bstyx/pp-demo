@@ -4,9 +4,13 @@ const SYN = { maize:"corn", inches:"inh2o", inch:"inh2o", water:"inh2o", h2o:"in
   firmware:"software", updating:"update", winter:"storage", store:"storage", storing:"storage", bean:"soybean", beans:"soybean", soybeans:"soybean", soy:"soybean",
   rx:"prescription", vrt:"prescription", prescriptions:"prescription", error:"alarm", errors:"alarm", code:"alarm", codes:"alarm", alarms:"alarm", blinking:"blink", flashing:"blink",
   calibrate:"calibration", calibrating:"calibration", cal:"calibration", setting:"set", settings:"set", setup:"set" };
+Object.assign(SYN, { faster:"speed", fast:"speed", quick:"speed", quicker:"speed", speeds:"speed", mph:"speed",
+  missing:"skips", miss:"skips", misses:"skips", gap:"skips", gaps:"skips", doubling:"multiples", screen:"2020", monitor:"2020", display:"2020" });
+const PHRASE = [[/\bhigh(er)?[ -]speeds?\b/g, "speed"], [/\b(two|2) seeds\b/g, "multiples"], [/\bpressure\b/g, "downforce vacuum"]];
 export function tok(s) {
+  s = String(s).toLowerCase(); for (const [r, w] of PHRASE) s = s.replace(r, w);
   return (String(s).toLowerCase().replace(/20\|20/g, "2020").match(/[a-z0-9]+/g) || [])
-    .filter(w => !STOP.has(w)).map(w => SYN[w] || w.replace(/(ing|es|s)$/, "").replace(/^(.{3,})e$/, "$1") || w);
+    .filter(w => !STOP.has(w)).map(w => SYN[w] || w).map(w => /^\d/.test(w) ? w : (w.replace(/(ing|es|s)$/, "").replace(/^(.{3,})e$/, "$1") || w));
 }
 export function buildIndex(kb) {
   const docs = kb.qa.map(x => { const t = tok([x.q, x.q, x.q, x.tags, x.tags, x.section, x.a].join(" "));
